@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu App Zafyre</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-SEU_CONVERSION_ID_AQUI"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        // Configure seu ID de Conversão do Google Ads aqui
+        gtag('config', 'AW-SEU_CONVERSION_ID_AQUI');
+    </script>
+</head>
+<body>
+    <h1>Bem-vindo ao Zafyre!</h1>
+    <p>Este é um aplicativo rodando no Replit com Firebase Admin SDK.</p>
+    <a href="/adicionar-dado">Adicionar um dado de teste ao Firestore</a><br>
+    <a href="/buscar-dados">Ver dados do Firestore</a>
+
+    <hr>
+
+    <h2>Upload de Imagem (Cloudinary - Direto do Frontend)</h2>
+    <form id="cloudinaryUploadForm">
+        <input type="file" id="cloudinaryFileInput" name="imagem" accept="image/*" required>
+        <button type="submit">Enviar Imagem para Cloudinary</button>
+    </form>
+    <p id="cloudinaryUploadMessage"></p>
+    <img id="cloudinaryUploadedImage" src="" alt="Imagem enviada Cloudinary" style="max-width: 300px; margin-top: 10px; display: none;">
+
+    <hr>
+
+    <h2>Pagamento (Mercado Pago)</h2>
+    <button id="pagarButton">Pagar com Mercado Pago (R$ 100,00)</button>
+    <p id="pagamentoMessage"></p>
+
+    <script>
+        // --- CLOUDINARY CONFIGURAÇÃO PARA UPLOAD DIRETO DO FRONTEND ---
+        // Use seu Cloud Name e o preset UNSIGNED que você configurou no Cloudinary
+        const CLOUDINARY_CONFIG = {
+            cloudName: 'dblahe34z', // SEU CLOUD NAME (já está configurado como dblahe34z)
+            uploadPreset: 'zafyre_unsigned_preset' // O preset que você configurou como "Unsigned" (já está configurado como zafyre_unsigned_preset)
+        };
+
+        // Script para lidar com o upload do formulário para Cloudinary (frontend)
+        document.getElementById('cloudinaryUploadForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const fileInput = document.getElementById('cloudinaryFileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Por favor, selecione um arquivo para upload.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', CLOUDINARY_CONFIG.uploadPreset);
+            // Opcional: Adicionar a pasta se o preset não a definir e você quiser subpastas dinâmicas
+            // formData.append('folder', 'zafyre-images/posts'); // Exemplo de pasta para posts
+
+            const cloudinaryUploadMessage = document.getElementById('cloudinaryUploadMessage');
+            const cloudinaryUploadedImage = document.getElementById('cloudinaryUploadedImage');
+
+            cloudinaryUploadMessage.textContent = 'Enviando imagem para Cloudinary...';
+            cloudinaryUploadMessage.style.color = 'blue';
+            cloudinaryUploadedImage.style.display = 'none';
+
+            try {
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/image/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    cloudinaryUploadMessage.textContent = 'Imagem enviada para Cloudinary com sucesso!';
+                    cloudinaryUploadMessage.style.color = 'green';
+                    cloudinaryUploadedImage.src = data.secure_url; // URL da imagem no Cloudinary
+                    cloudinaryUploadedImage.style.display = 'block';
+
+                    // Enviar a URL da imagem para o seu backend para salvar no Firestore
+                    const saveResponse = await fetch('/salvar-url-imagem-no-firestore', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ imageUrl: data.secure_url, publicId: data.public_id })
+                    });
+                    const saveResult = await saveResponse.json();
+                    if (saveResponse.ok) {
+                        console.log('URL da imagem salva no Firestore:', saveResult.message);
+                    } else {
+                        console.error('Erro ao salvar URL no Firestore:', saveResult.message);
+                    }
+
+                } else {
+                    cloudinaryUploadMessage.textContent = 'Erro no upload para Cloudinary: ' + (data.error ? data.error.message : 'Erro desconhecido.');
+                    cloudinaryUploadMessage.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Erro de rede ou servidor ao enviar para Cloudinary:', error);
+                cloudinaryUploadMessage.textContent = 'Erro ao conectar com o servidor Cloudinary.';
+                cloudinaryUploadMessage.style.color = 'red';
+            }
+        });
+
+        // Script para lidar com o pagamento do Mercado Pago
+        document.getElementById('pagarButton').addEventListener('click', async function() {
+            const pagamentoMessage = document.getElementById('pagamentoMessage');
+            pagamentoMessage.textContent = 'Criando preferência de pagamento...';
+            pagamentoMessage.style.color = 'blue';
+
+            try {
+                const response = await fetch('/criar-preferencia-pagamento', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({}) // Sem dados adicionais necessários para este exemplo
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    pagamentoMessage.textContent = 'Redirecionando para o Mercado Pago...';
+                    // Redireciona o usuário para o ponto de inicialização do Mercado Pago
+                    window.location.href = data.init_point;
+                } else {
+                    pagamentoMessage.textContent = 'Erro ao criar pagamento: ' + (data.message || 'Erro desconhecido.');
+                    pagamentoMessage.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Erro de rede ou servidor ao criar pagamento:', error);
+                pagamentoMessage.textContent = 'Erro ao conectar com o servidor de pagamento.';
+                pagamentoMessage.style.color = 'red';
+            }
+        });
+
+        // Exemplo: Disparar um evento de conversão do Google Ads após uma ação
+        // Você chamaria esta função após a conclusão de uma compra, por exemplo, na rota de sucesso do Mercado Pago.
+        function trackConversion() {
+            // Substitua pelos seus IDs e rótulos reais do Google Ads
+            gtag('event', 'conversion', {
+                'send_to': 'AW-SEU_CONVERSION_ID_AQUI/SEU_ROTULO_DE_CONVERSION_AQUI',
+                'value': 100.0, // Valor da conversão (adapte ao valor real da venda)
+                'currency': 'BRL' // Moeda
+            });
+            console.log('Evento de conversão do Google Ads disparado.');
+        }
+
+        // Para integrar com o Mercado Pago:
+        // Na rota de sucesso do backend (/pagamento-sucesso), você renderizaria uma página
+        // que, ao carregar, chamaria trackConversion().
+        // Ou, no frontend, se você puder verificar o sucesso após o redirecionamento (ex: pela URL),
+        // você pode chamar trackConversion() aqui. Por enquanto, é apenas um exemplo de função.
+        // Exemplo de como você CHAMARIA ela:
+        // if (window.location.pathname === '/pagamento-sucesso') {
+        //    trackConversion();
+        // }
+    </script>
+</body>
+</html>
